@@ -1,32 +1,44 @@
 
+import { db } from '../db';
+import { taskLettersTable } from '../db/schema';
 import { type UpdateOfficialDetailsInput, type TaskLetter } from '../schema';
+import { eq } from 'drizzle-orm';
 
 export async function updateOfficialDetails(input: UpdateOfficialDetailsInput): Promise<TaskLetter> {
-    // This is a placeholder declaration! Real code should be implemented here.
-    // The goal of this handler is updating the official completion details of a task letter.
-    // This is specifically for destination officials to fill in arrival_date, return_date, 
-    // ticket_taken status, and official_notes. Should update the updated_at timestamp automatically.
-    return Promise.resolve({
-        id: input.id,
-        register_number: '',
-        title: '',
-        recipient_name: '',
-        recipient_position: '',
-        destination_place: '',
-        purpose: '',
-        start_date: new Date(),
-        end_date: new Date(),
-        transportation: '',
-        advance_money: 0,
-        signatory_name: '',
-        signatory_position: '',
-        creation_place: '',
-        creation_date: new Date(),
-        arrival_date: input.arrival_date,
-        return_date: input.return_date,
-        ticket_taken: input.ticket_taken,
-        official_notes: input.official_notes,
-        created_at: new Date(),
-        updated_at: new Date()
-    } as TaskLetter);
+  try {
+    // Convert Date objects to ISO date strings for date columns
+    const updateData = {
+      arrival_date: input.arrival_date ? input.arrival_date.toISOString().split('T')[0] : null,
+      return_date: input.return_date ? input.return_date.toISOString().split('T')[0] : null,
+      ticket_taken: input.ticket_taken,
+      official_notes: input.official_notes,
+      updated_at: new Date() // timestamp column accepts Date objects
+    };
+
+    // Update the task letter with official details
+    const result = await db.update(taskLettersTable)
+      .set(updateData)
+      .where(eq(taskLettersTable.id, input.id))
+      .returning()
+      .execute();
+
+    if (result.length === 0) {
+      throw new Error(`Task letter with id ${input.id} not found`);
+    }
+
+    // Convert database result back to proper types
+    const taskLetter = result[0];
+    return {
+      ...taskLetter,
+      advance_money: parseFloat(taskLetter.advance_money), // Convert numeric to number
+      start_date: new Date(taskLetter.start_date + 'T00:00:00.000Z'), // Convert date string to Date with UTC timezone
+      end_date: new Date(taskLetter.end_date + 'T00:00:00.000Z'), // Convert date string to Date with UTC timezone
+      creation_date: new Date(taskLetter.creation_date + 'T00:00:00.000Z'), // Convert date string to Date with UTC timezone
+      arrival_date: taskLetter.arrival_date ? new Date(taskLetter.arrival_date + 'T00:00:00.000Z') : null,
+      return_date: taskLetter.return_date ? new Date(taskLetter.return_date + 'T00:00:00.000Z') : null
+    };
+  } catch (error) {
+    console.error('Official details update failed:', error);
+    throw error;
+  }
 }
